@@ -73,16 +73,24 @@ class _YtdlpLogger:
 
 
 def video_format_selector(limit: VideoLimit) -> str:
-    """Retorna melhor vídeo+áudio MP4 até o limite escolhido."""
+    """Retorna vídeo+áudio sem excluir containers antes da descoberta.
+
+    O yt-dlp conhece os formatos disponíveis somente depois de extrair a URL.
+    Por isso, filtros como ``[ext=mp4]`` são deixados de fora: alguns vídeos
+    oferecem somente WebM, HLS ou combinações de codecs diferentes.
+    """
 
     if limit == "auto":
-        return "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b"
+        return "bv*+ba/b"
 
-    # O fallback final permite concluir mesmo quando o filtro de MP4 não
-    # encontra uma combinação perfeita; o pós-processamento decide a extensão.
+    # A ordem preserva a intenção "até H": primeiro tenta vídeo separado com
+    # altura/largura dentro do limite, depois um formato já combinado. Os
+    # fallbacks finais evitam falhar quando o site só expõe uma representação.
     return (
-        f"bv*[height<={limit}][ext=mp4]+ba[ext=m4a]/"
-        f"b[height<={limit}][ext=mp4]/b[height<={limit}]/b"
+        f"bv*[height<={limit}]+ba/"
+        f"bv*[width<={limit}]+ba/"
+        f"b[height<={limit}]/b[width<={limit}]/"
+        "bv*+ba/b"
     )
 
 
@@ -204,7 +212,8 @@ def build_options(
         "progress_hooks": [_progress_hook(callback, cancel)],
         "quiet": True,
         "no_warnings": False,
-        "merge_output_format": "mp4" if options.mode == "video" else None,
+        # Não force MP4: o container nativo é parte da solução escolhida pelo
+        # yt-dlp e pode ser WebM, MP4 ou outro formato compatível.
     }
 
     if log_callback:

@@ -12,13 +12,15 @@ from src.downloader_core import (
 
 
 class SelectorTests(unittest.TestCase):
-    def test_auto_prefers_mp4_video_and_m4a_audio(self):
-        self.assertEqual(video_format_selector("auto"), "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b")
+    def test_auto_does_not_exclude_non_mp4_formats(self):
+        self.assertEqual(video_format_selector("auto"), "bv*+ba/b")
+        self.assertNotIn("ext=mp4", video_format_selector("auto"))
 
     def test_1080_is_a_maximum_with_lower_fallback(self):
         selector = video_format_selector("1080")
         self.assertIn("height<=1080", selector)
-        self.assertIn("/b[height<=1080]/b", selector)
+        self.assertIn("width<=1080", selector)
+        self.assertIn("bv*+ba/b", selector)
 
     def test_audio_uses_audio_only_source(self):
         self.assertEqual(audio_format_selector(), "ba/b")

@@ -8,7 +8,7 @@ comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
 
 ## Recursos atuais
 
-- download de vídeo em modo automático ou com limite de resolução;
+- download de vídeo em modo automático ou com limite de resolução, sem restringir a fonte a MP4;
 - extração somente de áudio em MP3, M4A, Opus, FLAC ou WAV;
 - seleção de pasta de destino, lembrada localmente;
 - progresso, cancelamento e proteção contra downloads duplicados;
@@ -18,6 +18,11 @@ comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
 - proteção contra colagem acidental de logs enormes no campo de URL.
 
 A aba de playlists está planejada, mas ainda não faz parte desta versão.
+
+No modo automático, o yt-dlp escolhe a melhor combinação de vídeo e áudio que o link realmente
+oferece. Ao escolher uma resolução, o aplicativo tenta essa resolução ou uma menor disponível;
+containers como WebM não são descartados apenas por não serem MP4. A escolha explícita dos IDs e
+formatos descobertos antes do download continua planejada para uma próxima versão.
 
 ## Usar a versão Windows
 
