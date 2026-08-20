@@ -359,12 +359,15 @@ class DownloaderApp:
 
     def _install_update(self, value):
         archive, release = value
-        helper = Path(sys.executable).parent / "YTD1P-Updater.exe"
+        helper_dir = Path(sys.executable).parent / "updater" / "YTD1P-Updater"
+        helper = helper_dir / "YTD1P-Updater.exe"
         if not helper.is_file():
             self._handle_update_error(ValueError("Auxiliar de atualização não encontrado."))
             return
-        helper_copy = Path(tempfile.gettempdir()) / "YTD1P-updates" / "YTD1P-Updater.exe"
-        shutil.copy2(helper, helper_copy)
+        helper_copy_dir = Path(tempfile.gettempdir()) / "YTD1P-updates" / "updater"
+        shutil.rmtree(helper_copy_dir, ignore_errors=True)
+        shutil.copytree(helper_dir, helper_copy_dir)
+        helper_copy = helper_copy_dir / "YTD1P-Updater.exe"
         install_dir = Path(sys.executable).parent
         subprocess.Popen(
             [
