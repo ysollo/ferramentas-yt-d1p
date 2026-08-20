@@ -13,8 +13,7 @@ comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
 - seleção de pasta de destino, lembrada localmente;
 - progresso, cancelamento e proteção contra downloads duplicados;
 - mensagens resumidas para uso normal e detalhes técnicos completos;
-- tentativa opcional de compatibilidade com o YouTube usando WebPoClient, quando o plugin
-  correspondente está presente na distribuição;
+- tentativa opcional de compatibilidade com o YouTube usando WebPoClient;
 - suporte opcional à sessão local do Firefox, Chrome ou Edge;
 - proteção contra colagem acidental de logs enormes no campo de URL.
 
@@ -35,8 +34,8 @@ python -m src.app
 ```
 
 Para baixar e converter mídia pelo código-fonte, FFmpeg e FFprobe precisam estar disponíveis no
-`PATH`. O runtime Deno é necessário para resolver alguns desafios JavaScript do YouTube. O modo
-WebPoClient exige também o plugin correspondente, que não é necessário para o fluxo normal.
+`PATH`. O runtime Deno é necessário para resolver alguns desafios JavaScript do YouTube. O
+provedor WebPoClient é instalado junto com as dependências e empacotado na distribuição Windows.
 
 ## Gerar a distribuição Windows
 
