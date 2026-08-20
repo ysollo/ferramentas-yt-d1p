@@ -1,0 +1,11 @@
+# Artefatos locais de build e execução
+build/pyinstaller/
+build/*.spec
+dist/*
+!dist/.gitkeep
+
+# Preferências e saídas locais
+__pycache__/
+*.py[cod]
+.pytest_cache/
+

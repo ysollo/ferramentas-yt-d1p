@@ -1,0 +1,72 @@
+# YTD1P Downloader
+
+Downloader simples para vídeos e áudios do YouTube no Windows, com interface gráfica.
+
+O projeto usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) como motor e FFmpeg para juntar streams
+e converter áudio. A interface foi pensada para uso direto por pessoas que não querem montar
+comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
+
+## Recursos atuais
+
+- download de vídeo em modo automático ou com limite de resolução;
+- extração somente de áudio em MP3, M4A, Opus, FLAC ou WAV;
+- seleção de pasta de destino, lembrada localmente;
+- progresso, cancelamento e proteção contra downloads duplicados;
+- mensagens resumidas para uso normal e detalhes técnicos completos;
+- tentativa opcional de compatibilidade com o YouTube usando WebPoClient, quando o plugin
+  correspondente está presente na distribuição;
+- suporte opcional à sessão local do Firefox, Chrome ou Edge;
+- proteção contra colagem acidental de logs enormes no campo de URL.
+
+A aba de playlists está planejada, mas ainda não faz parte desta versão.
+
+## Usar a versão Windows
+
+Baixe o ZIP na página de Releases, extraia a pasta inteira e execute `YTD1P.exe`. Não remova a
+pasta `_internal`: ela contém os runtimes necessários para o aplicativo funcionar.
+
+## Executar pelo código-fonte
+
+Requer Python 3.11+ e as dependências listadas em `requirements.txt`:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m src.app
+```
+
+Para baixar e converter mídia pelo código-fonte, FFmpeg e FFprobe precisam estar disponíveis no
+`PATH`. O runtime Deno é necessário para resolver alguns desafios JavaScript do YouTube. O modo
+WebPoClient exige também o plugin correspondente, que não é necessário para o fluxo normal.
+
+## Gerar a distribuição Windows
+
+Com PyInstaller, FFmpeg, FFprobe e Deno disponíveis no `PATH`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build\build_windows.ps1 -Clean
+```
+
+A distribuição em modo pasta será criada em `dist\YTD1P\`. Para entregar a terceiros, compacte a
+pasta inteira mantendo sua estrutura.
+
+## Privacidade e limitações
+
+O aplicativo não envia cookies, tokens, URLs ou logs para um servidor. A preferência da última
+pasta é salva localmente. Vídeos privados, restritos, indisponíveis ou bloqueados pelo YouTube
+podem exigir login, sessão do navegador ou simplesmente não ser baixáveis.
+
+Use a ferramenta somente para conteúdo que você tem autorização para baixar e respeite os termos
+dos sites e os direitos dos criadores.
+
+## Licença
+
+Este projeto é distribuído sob a licença MIT. Consulte `LICENSE`.
+
+<!-- A documentação histórica de desenvolvimento fica fora do repositório público. -->
+
+## Estrutura pública
+
+- `src/` — código-fonte do downloader;
+- `build/` — scripts e instruções para gerar o executável;
+- `dist/` — versões distribuíveis geradas localmente e ignoradas pelo Git;
+- `docs/` — instruções públicas selecionadas.
