@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 from typing import Callable
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, urlretrieve
 
 
 GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/ysollo/ferramentas-yt-d1p/releases/latest"
@@ -23,6 +23,7 @@ class ReleaseInfo:
     asset_url: str | None = None
     asset_size: int | None = None
     asset_sha256: str | None = None
+    checksum_url: str | None = None
 
 
 def normalize_version(value: str) -> tuple[int, ...]:
@@ -55,6 +56,14 @@ def parse_release(payload: dict) -> ReleaseInfo:
     )
     if not preferred:
         return ReleaseInfo(version=version, page_url=page_url)
+    checksum = next(
+        (
+            item
+            for item in assets
+            if str(item.get("name", "")).lower().endswith((".sha256", ".sha256sum", ".sha256sums"))
+        ),
+        None,
+    )
     size = preferred.get("size")
     return ReleaseInfo(
         version=version,
@@ -63,6 +72,7 @@ def parse_release(payload: dict) -> ReleaseInfo:
         asset_url=str(preferred.get("browser_download_url") or "") or None,
         asset_size=int(size) if size is not None else None,
         asset_sha256=str(preferred.get("sha256") or "") or None,
+        checksum_url=str(checksum.get("browser_download_url") or "") or None if checksum else None,
     )
 
 
@@ -84,3 +94,24 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
         for chunk in iter(lambda: stream.read(chunk_size), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def download_file(url: str, destination: Path, timeout: float = 30.0) -> None:
+    """Baixa um asset para o caminho indicado, sem executar seu conteúdo."""
+
+    request = Request(url, headers={"User-Agent": "YTD1P-Updater"})
+    with urlopen(request, timeout=timeout) as response, destination.open("wb") as output:
+        while chunk := response.read(1024 * 1024):
+            output.write(chunk)
+
+
+def checksum_from_manifest(text: str, asset_name: str) -> str:
+    """Lê SHA-256 no formato comum ``hash *arquivo.zip``."""
+
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[1].lstrip("*") == asset_name:
+            candidate = parts[0].lower()
+            if re.fullmatch(r"[0-9a-f]{64}", candidate):
+                return candidate
+    raise ValueError(f"O manifesto não contém SHA-256 para {asset_name}.")

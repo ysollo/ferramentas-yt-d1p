@@ -12,6 +12,7 @@ $deno = (Get-Command deno -ErrorAction Stop).Source
 
 if ($Clean) {
     Remove-Item -LiteralPath (Join-Path $project "build\pyinstaller") -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $project "build\pyinstaller-updater") -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $project "dist\YTD1P") -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -30,6 +31,18 @@ python -m PyInstaller @pyinstallerArgs
 
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller falhou com código $LASTEXITCODE."
+}
+
+$updaterArgs = @(
+    "--noconfirm", "--clean", "--onefile", "--console", "--name", "YTD1P-Updater",
+    "--distpath", "dist\YTD1P", "--workpath", "build\pyinstaller-updater", "--specpath", "build",
+    "src\updater_helper.py"
+)
+
+python -m PyInstaller @updaterArgs
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Build do auxiliar de atualização falhou com código $LASTEXITCODE."
 }
 
 $output = Join-Path $project "dist\YTD1P"

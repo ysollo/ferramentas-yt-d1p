@@ -7,6 +7,8 @@ import json
 import os
 import shutil
 import sys
+import subprocess
+import tempfile
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -41,8 +43,11 @@ from src.downloader_core import (  # noqa: E402
 )
 from src.update_checker import (  # noqa: E402
     RELEASE_PAGE_URL,
+    checksum_from_manifest,
+    download_file,
     fetch_latest_release,
     is_newer_version,
+    sha256_file,
 )
 
 
@@ -303,15 +308,76 @@ class DownloaderApp:
         if is_newer_version(APP_VERSION, release.version):
             self._set_status(f"Atualização disponível: v{release.version}", "warning")
             self._append_log(f"Nova versão disponível: v{release.version}.")
+            if not release.asset_url or not release.asset_name or not release.checksum_url:
+                self._append_log("A release não oferece asset e checksum compatíveis; abrindo a página manual.")
+                if messagebox.askyesno(
+                    "Atualização disponível",
+                    f"A versão v{release.version} está disponível, mas precisa ser baixada manualmente.\n\n"
+                    "Deseja abrir a página oficial?",
+                ):
+                    webbrowser.open(release.page_url)
+                return
+            if not getattr(sys, "frozen", False):
+                self._append_log("Atualização automática disponível somente no executável empacotado.")
+                if messagebox.askyesno(
+                    "Atualização disponível",
+                    f"A versão v{release.version} está disponível.\n\nDeseja abrir a página oficial?",
+                ):
+                    webbrowser.open(release.page_url)
+                return
             if messagebox.askyesno(
                 "Atualização disponível",
                 f"A versão v{release.version} está disponível.\n\n"
-                "Deseja abrir a página para baixar a atualização?",
+                "Deseja baixar e instalar a atualização agora?",
             ):
-                webbrowser.open(release.page_url)
+                self._set_status("Baixando atualização segura…", "working")
+                self._append_log("Baixando ZIP e manifesto de checksum…")
+                threading.Thread(target=self._download_update_worker, args=(release,), daemon=True).start()
         else:
             self._set_status(f"YTD1P v{APP_VERSION} está atualizado.", "success")
             self._append_log("Nenhuma atualização do aplicativo encontrada.")
+
+    def _download_update_worker(self, release):
+        try:
+            update_dir = Path(tempfile.gettempdir()) / "YTD1P-updates"
+            update_dir.mkdir(parents=True, exist_ok=True)
+            archive = update_dir / release.asset_name
+            checksum_manifest = update_dir / f"{release.version}.sha256"
+            download_file(release.asset_url, archive)
+            if release.asset_size is not None and archive.stat().st_size != release.asset_size:
+                raise ValueError("O tamanho do ZIP recebido não confere com a release.")
+            download_file(release.checksum_url, checksum_manifest)
+            expected = checksum_from_manifest(
+                checksum_manifest.read_text(encoding="utf-8"), release.asset_name
+            )
+            actual = sha256_file(archive)
+            if actual.lower() != expected.lower():
+                raise ValueError("A assinatura SHA-256 do ZIP não confere; instalação cancelada.")
+            self.events.put(("update_ready", (archive, release)))
+        except Exception as error:
+            self.events.put(("update_error", error))
+
+    def _install_update(self, value):
+        archive, release = value
+        helper = Path(sys.executable).parent / "YTD1P-Updater.exe"
+        if not helper.is_file():
+            self._handle_update_error(ValueError("Auxiliar de atualização não encontrado."))
+            return
+        helper_copy = Path(tempfile.gettempdir()) / "YTD1P-updates" / "YTD1P-Updater.exe"
+        shutil.copy2(helper, helper_copy)
+        install_dir = Path(sys.executable).parent
+        subprocess.Popen(
+            [
+                str(helper_copy),
+                "--archive", str(archive),
+                "--install-dir", str(install_dir),
+                "--pid", str(os.getpid()),
+            ],
+            close_fds=True,
+        )
+        self._set_status(f"Atualização v{release.version} validada; reiniciando…", "success")
+        self._append_log("ZIP validado. O atualizador substituirá a instalação após esta janela fechar.")
+        self.root.after(500, self.root.destroy)
 
     def _handle_update_error(self, error):
         self._append_log(f"Atualização não verificada: {error}")
@@ -453,6 +519,8 @@ class DownloaderApp:
                     self._handle_retry_prompt(value)
                 elif event == "update_result":
                     self._handle_update_result(value)
+                elif event == "update_ready":
+                    self._install_update(value)
                 elif event == "update_error":
                     self._handle_update_error(value)
                 elif event == "log":

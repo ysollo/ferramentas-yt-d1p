@@ -1,5 +1,6 @@
 # Artefatos locais de build e execução
 build/pyinstaller/
+build/pyinstaller-updater/
 build/*.spec
 dist/*
 !dist/.gitkeep
@@ -8,4 +9,3 @@ dist/*
 __pycache__/
 *.py[cod]
 .pytest_cache/
-

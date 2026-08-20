@@ -2,6 +2,7 @@ import io
 import unittest
 
 from src.update_checker import (
+    checksum_from_manifest,
     is_newer_version,
     normalize_version,
     parse_release,
@@ -54,6 +55,12 @@ class UpdateCheckerTests(unittest.TestCase):
         payload = b'{"tag_name":"v0.1.1","html_url":"https://example.test/release","assets":[]}'
         release = fetch_latest_release(opener=lambda request, timeout: FakeResponse(payload))
         self.assertEqual(release.version, "v0.1.1")
+
+    def test_checksum_manifest_selects_named_asset(self):
+        self.assertEqual(
+            checksum_from_manifest("abc\n" + "a" * 64 + " *app.zip\n", "app.zip"),
+            "a" * 64,
+        )
 
 
 if __name__ == "__main__":
