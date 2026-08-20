@@ -17,7 +17,7 @@ if ($Clean) {
 
 $pyinstallerArgs = @(
     "--noconfirm", "--clean", "--windowed", "--name", "YTD1P",
-    "--collect-submodules", "yt_dlp_plugins",
+    "--hidden-import", "yt_dlp_plugins.extractor.getpot_wpc",
     "--add-binary", "$ffmpeg;runtime",
     "--add-binary", "$ffprobe;runtime",
     "--add-binary", "$deno;runtime",
