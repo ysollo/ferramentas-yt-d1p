@@ -81,16 +81,18 @@ def video_format_selector(limit: VideoLimit) -> str:
     """
 
     if limit == "auto":
-        return "bv*+ba/b"
+        return "bestvideo*+(bestaudio[acodec!=opus]/bestaudio)"
 
     # A ordem preserva a intenção "até H": primeiro tenta vídeo separado com
     # altura/largura dentro do limite, depois um formato já combinado. Os
     # fallbacks finais evitam falhar quando o site só expõe uma representação.
+    audio = "(bestaudio[acodec!=opus]/bestaudio)"
     return (
-        f"bv*[height<={limit}]+ba/"
-        f"bv*[width<={limit}]+ba/"
-        f"b[height<={limit}]/b[width<={limit}]/"
-        "bv*+ba/b"
+        f"bestvideo*[height={limit}]+{audio}/"
+        f"bestvideo*[width={limit}]+{audio}/"
+        f"bestvideo*[height<={limit}]+{audio}/"
+        f"bestvideo*[width<={limit}]+{audio}/"
+        f"bestvideo*+{audio}/best"
     )
 
 
@@ -209,6 +211,8 @@ def build_options(
         "continuedl": True,
         "retries": 3,
         "fragment_retries": 3,
+        "ignoreconfig": True,
+        "sleep_interval_requests": 0.75,
         "progress_hooks": [_progress_hook(callback, cancel)],
         "quiet": True,
         "no_warnings": False,
