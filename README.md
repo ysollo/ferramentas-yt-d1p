@@ -54,6 +54,10 @@ O aplicativo não envia cookies, tokens, URLs ou logs para um servidor. A prefer
 pasta é salva localmente. Vídeos privados, restritos, indisponíveis ou bloqueados pelo YouTube
 podem exigir login, sessão do navegador ou simplesmente não ser baixáveis.
 
+O modo de compatibilidade WebPoClient usa um navegador Chromium/Chrome instalado no computador
+para gerar tokens temporários. Isso não compartilha a sessão do usuário por padrão e não exige
+login; se o navegador auxiliar não estiver disponível, o fluxo normal ainda pode ser usado.
+
 Use a ferramenta somente para conteúdo que você tem autorização para baixar e respeite os termos
 dos sites e os direitos dos criadores.
 
