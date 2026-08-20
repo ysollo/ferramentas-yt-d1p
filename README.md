@@ -14,7 +14,7 @@ comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
 - progresso, cancelamento e proteção contra downloads duplicados;
 - mensagens resumidas para uso normal e detalhes técnicos completos;
 - tentativa opcional de compatibilidade com o YouTube usando WebPoClient;
-- suporte opcional à sessão local do Firefox, Chrome ou Edge;
+- suporte opcional à sessão local do Chrome, Firefox ou Edge (Chrome é o padrão);
 - proteção contra colagem acidental de logs enormes no campo de URL.
 
 A aba de playlists está planejada, mas ainda não faz parte desta versão.

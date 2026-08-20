@@ -60,7 +60,9 @@ class DownloaderApp:
         self.audio_format = tk.StringVar(value="mp3")
         self.url_error = tk.StringVar()
         self.browser_session = tk.BooleanVar(value=False)
-        self.browser = tk.StringVar(value="firefox")
+        # Chrome é o caminho mais provável para a sessão/cookies do usuário;
+        # Firefox e Edge continuam disponíveis nas opções avançadas.
+        self.browser = tk.StringVar(value="chrome")
         self.wpc_enabled = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Pronto para baixar")
         self.progress = tk.DoubleVar(value=0)
@@ -143,7 +145,7 @@ class DownloaderApp:
         ttk.Combobox(
             advanced,
             textvariable=self.browser,
-            values=("firefox", "chrome", "edge"),
+            values=("chrome", "firefox", "edge"),
             state="readonly",
             width=10,
         ).grid(row=0, column=2, sticky="w")
