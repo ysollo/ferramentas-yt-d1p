@@ -11,10 +11,12 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+import webbrowser
 
 # Permite que o plugin local seja descoberto pelo yt-dlp quando a aplicação
 # estiver sendo executada a partir da raiz do projeto.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+APP_ROOT = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
 PLUGIN_ROOT = PROJECT_ROOT / "vendor" / "pot-wpc"
 if PLUGIN_ROOT.exists() and str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
@@ -37,12 +39,27 @@ from src.downloader_core import (  # noqa: E402
     Progress,
     download,
 )
+from src.update_checker import (  # noqa: E402
+    RELEASE_PAGE_URL,
+    fetch_latest_release,
+    is_newer_version,
+)
+
+
+def _read_version() -> str:
+    try:
+        return (APP_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "0.0.0"
+
+
+APP_VERSION = _read_version()
 
 
 class DownloaderApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("YTD1P Downloader")
+        self.root.title(f"YTD1P Downloader v{APP_VERSION}")
         self.root.geometry("760x760")
         self.root.minsize(680, 680)
 
@@ -71,8 +88,18 @@ class DownloaderApp:
         self._load_settings()
         self._build()
         self.root.after(100, self._drain_events)
+        self.root.after(1200, self._check_updates_in_background)
 
     def _build(self):
+        menu = tk.Menu(self.root)
+        help_menu = tk.Menu(menu, tearoff=False)
+        help_menu.add_command(label="Verificar atualizações", command=self._check_updates_now)
+        help_menu.add_command(
+            label="Abrir página do projeto", command=lambda: webbrowser.open(RELEASE_PAGE_URL)
+        )
+        menu.add_cascade(label="Ajuda", menu=help_menu)
+        self.root.configure(menu=menu)
+
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill="both", expand=True, padx=12, pady=12)
 
@@ -257,6 +284,43 @@ class DownloaderApp:
         except (OSError, AttributeError) as error:
             messagebox.showerror("Pasta não disponível", f"Não foi possível abrir a pasta escolhida.\n\n{error}")
 
+    def _check_updates_in_background(self):
+        threading.Thread(target=self._check_updates_worker, daemon=True).start()
+
+    def _check_updates_now(self):
+        self._set_status("Verificando atualizações…", "working")
+        self._append_log("Consultando a release pública do YTD1P…")
+        threading.Thread(target=self._check_updates_worker, daemon=True).start()
+
+    def _check_updates_worker(self):
+        try:
+            release = fetch_latest_release()
+            self.events.put(("update_result", release))
+        except Exception as error:  # rede indisponível não impede o download local
+            self.events.put(("update_error", error))
+
+    def _handle_update_result(self, release):
+        if is_newer_version(APP_VERSION, release.version):
+            self._set_status(f"Atualização disponível: v{release.version}", "warning")
+            self._append_log(f"Nova versão disponível: v{release.version}.")
+            if messagebox.askyesno(
+                "Atualização disponível",
+                f"A versão v{release.version} está disponível.\n\n"
+                "Deseja abrir a página para baixar a atualização?",
+            ):
+                webbrowser.open(release.page_url)
+        else:
+            self._set_status(f"YTD1P v{APP_VERSION} está atualizado.", "success")
+            self._append_log("Nenhuma atualização do aplicativo encontrada.")
+
+    def _handle_update_error(self, error):
+        self._append_log(f"Atualização não verificada: {error}")
+        if self.status.get() == "Verificando atualizações…":
+            self._set_status(
+                "Não foi possível verificar atualizações; funcionamento normal mantido.",
+                "warning",
+            )
+
     def _append_log(self, text: str):
         self.log.configure(state="normal")
         self.log.insert("end", text + "\n")
@@ -387,6 +451,10 @@ class DownloaderApp:
                     self._handle_error(value)
                 elif event == "retry_prompt":
                     self._handle_retry_prompt(value)
+                elif event == "update_result":
+                    self._handle_update_result(value)
+                elif event == "update_error":
+                    self._handle_update_error(value)
                 elif event == "log":
                     self._handle_log(str(value))
         except queue.Empty:

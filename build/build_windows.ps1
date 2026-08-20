@@ -21,6 +21,7 @@ $pyinstallerArgs = @(
     "--add-binary", "$ffmpeg;runtime",
     "--add-binary", "$ffprobe;runtime",
     "--add-binary", "$deno;runtime",
+    "--add-data", "$project\VERSION;.",
     "--distpath", "dist", "--workpath", "build\pyinstaller", "--specpath", "build",
     "src\app.py"
 )
