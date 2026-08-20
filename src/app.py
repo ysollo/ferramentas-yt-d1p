@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 import json
 import os
+import shutil
 import sys
 import threading
 import tkinter as tk
@@ -310,7 +311,35 @@ class DownloaderApp:
             use_browser_session=self.browser_session.get(),
             browser=self.browser.get() if self.browser_session.get() else None,
             pot_provider="wpc" if use_compatibility else "none",
+            wpc_browser_path=self._find_wpc_browser() if use_compatibility else None,
         )
+
+    @staticmethod
+    def _find_wpc_browser() -> str | None:
+        """Encontra um navegador Chromium para o provedor WebPoClient."""
+
+        candidates = [
+            shutil.which("chrome"),
+            shutil.which("chromium"),
+            shutil.which("msedge"),
+        ]
+        for base in (
+            os.environ.get("PROGRAMFILES"),
+            os.environ.get("PROGRAMFILES(X86)"),
+            os.environ.get("LOCALAPPDATA"),
+        ):
+            if base:
+                candidates.extend(
+                    [
+                        str(Path(base) / "Google/Chrome/Application/chrome.exe"),
+                        str(Path(base) / "Chromium/Application/chrome.exe"),
+                        str(Path(base) / "Microsoft/Edge/Application/msedge.exe"),
+                    ]
+                )
+        for candidate in candidates:
+            if candidate and Path(candidate).is_file():
+                return str(Path(candidate))
+        return None
 
     def _launch_worker(self, options: DownloadOptions):
         self.worker = threading.Thread(target=self._run_download, args=(options,), daemon=True)
@@ -414,6 +443,17 @@ class DownloaderApp:
 
     def _handle_retry_prompt(self, value):
         error, options = value
+        browser_path = options.wpc_browser_path or self._find_wpc_browser()
+        if not browser_path:
+            message = (
+                "Para tentar o modo de compatibilidade, é necessário ter Chrome, Chromium "
+                "ou Edge instalado. O Firefox não é compatível com este recurso."
+            )
+            self._finish()
+            self._set_status(message, "error")
+            self._append_log(message)
+            messagebox.showerror("Navegador compatível não encontrado", message)
+            return
         accepted = messagebox.askyesno(
             "Tentar modo de compatibilidade?",
             "O YouTube bloqueou este download.\n\n"
@@ -443,6 +483,7 @@ class DownloaderApp:
                 browser=options.browser,
                 pot_provider="wpc",
                 youtube_player_client="web_safari",
+                wpc_browser_path=browser_path,
             )
         )
 

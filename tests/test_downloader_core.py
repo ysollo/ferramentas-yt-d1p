@@ -61,6 +61,21 @@ class SelectorTests(unittest.TestCase):
             )
         self.assertEqual(config["extractor_args"], {"youtube": {"player_client": ["web_safari"]}})
 
+    def test_wpc_can_use_explicit_chromium_browser_path(self):
+        with TemporaryOutput() as output:
+            config = build_options(
+                DownloadOptions(
+                    url="https://example.test/video",
+                    output_dir=output,
+                    pot_provider="wpc",
+                    wpc_browser_path="C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+                )
+            )
+        self.assertEqual(
+            config["extractor_args"]["youtubepot-wpc"],
+            {"browser_path": ["C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"]},
+        )
+
     def test_video_filename_includes_resolution(self):
         with TemporaryOutput() as output:
             config = build_options(

@@ -36,6 +36,7 @@ class DownloadOptions:
     browser: str | None = None
     pot_provider: PotProvider = "none"
     youtube_player_client: str | None = None
+    wpc_browser_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +233,10 @@ def build_options(
         # web_safari, o yt-dlp pode escolher outro cliente e continuar em 403.
         client = options.youtube_player_client or "web_safari"
         ydl_options["extractor_args"] = {"youtube": {"player_client": [client]}}
+        if options.wpc_browser_path:
+            ydl_options["extractor_args"]["youtubepot-wpc"] = {
+                "browser_path": [options.wpc_browser_path]
+            }
 
     return {key: value for key, value in ydl_options.items() if value is not None}
 
