@@ -2,7 +2,7 @@
 
 Downloader simples para vídeos e áudios do YouTube no Windows, com interface gráfica.
 
-Versão atual: **0.2.6**.
+Versão atual: **0.2.8**.
 
 ## O que mudou nesta versão
 
@@ -37,7 +37,8 @@ formatos descobertos antes do download continua planejada para uma próxima vers
 
 O aplicativo verifica a release estável mais recente do GitHub em segundo plano e também oferece a
 opção manual em `Ajuda > Verificar atualizações`. A instalação ainda é assistida: o programa abre a
-página oficial para o usuário baixar o ZIP, sem substituir arquivos automaticamente.
+página oficial para o usuário baixar o ZIP, valida o arquivo e pode solicitar a permissão do Windows
+para substituir a pasta da instalação.
 
 ## Usar a versão Windows
 
