@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
+import uuid
 import zipfile
 
 
@@ -38,7 +39,12 @@ def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> 
         time.sleep(0.25)
 
     parent = install_dir.parent
-    staging = Path(tempfile.mkdtemp(prefix=".YTD1P-update-", dir=parent))
+    # A instalação pode estar numa pasta com permissões especiais. A extração
+    # ocorre no TEMP e só a troca final toca no diretório do aplicativo.
+    staging = Path(tempfile.gettempdir()) / f"YTD1P-update-{uuid.uuid4().hex}"
+    # mkdir herda as permissões normais do TEMP; mkdtemp cria uma ACL restrita
+    # que, neste Windows, impede a criação da subpasta _internal do ZIP.
+    staging.mkdir()
     backup = parent / f"{install_dir.name}.backup"
     try:
         extracted = _safe_extract(archive, staging)
