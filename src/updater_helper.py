@@ -47,13 +47,18 @@ def _rename_with_retry(source: Path, destination: Path, attempts: int = 60) -> N
     raise last_error or OSError(f"Não foi possível renomear {source}.")
 
 
-def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> None:
-    for _ in range(120):
+def _wait_for_process_exit(pid: int, timeout: float = 15.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
         except OSError:
-            break
+            return
         time.sleep(0.25)
+
+
+def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> None:
+    _wait_for_process_exit(pid)
 
     parent = install_dir.parent
     # A instalação pode estar numa pasta com permissões especiais. A extração
