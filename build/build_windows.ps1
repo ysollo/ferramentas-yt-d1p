@@ -34,7 +34,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $updaterArgs = @(
-    "--noconfirm", "--clean", "--onedir", "--console", "--name", "YTD1P-Updater",
+    "--noconfirm", "--clean", "--onedir", "--windowed", "--name", "YTD1P-Updater",
     "--distpath", "dist\YTD1P\updater", "--workpath", "build\pyinstaller-updater", "--specpath", "build",
     "src\updater_helper.py"
 )

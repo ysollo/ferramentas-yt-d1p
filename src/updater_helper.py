@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import uuid
 import zipfile
 
@@ -101,6 +102,22 @@ def _relaunch_elevated() -> None:
         raise PermissionError("A atualização precisa da permissão do Windows para substituir a instalação.")
 
 
+def _report_error(error: BaseException) -> None:
+    log_dir = Path(tempfile.gettempdir()) / "YTD1P-updates"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "updater-error.log"
+    log_path.write_text(traceback.format_exc(), encoding="utf-8")
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            f"A atualização não foi concluída.\n\nDetalhes salvos em:\n{log_path}",
+            "Atualização do YTD1P",
+            0x10,
+        )
+    except (AttributeError, OSError):
+        pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--archive", type=Path, required=True)
@@ -109,10 +126,13 @@ def main() -> None:
     parser.add_argument("--no-launch", action="store_true")
     parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    if not args.elevated and not _is_admin():
-        _relaunch_elevated()
-        return
-    install(args.archive, args.install_dir, args.pid, launch=not args.no_launch)
+    try:
+        if not args.elevated and not _is_admin():
+            _relaunch_elevated()
+            return
+        install(args.archive, args.install_dir, args.pid, launch=not args.no_launch)
+    except Exception as error:
+        _report_error(error)
 
 
 if __name__ == "__main__":

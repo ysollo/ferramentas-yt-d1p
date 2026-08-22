@@ -2,7 +2,7 @@
 
 Downloader simples para vídeos e áudios do YouTube no Windows, com interface gráfica.
 
-Versão atual: **0.2.9**.
+Versão atual: **0.3.0**.
 
 ## O que mudou nesta versão
 
