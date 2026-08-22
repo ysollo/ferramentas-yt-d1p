@@ -58,6 +58,19 @@ def _wait_for_process_exit(pid: int, timeout: float = 15.0) -> None:
         time.sleep(0.25)
 
 
+def _copy_tree_in_place(source: Path, destination: Path) -> None:
+    """Atualiza a distribuição quando o Defender bloqueia a renomeação da pasta."""
+
+    for item in source.rglob("*"):
+        relative = item.relative_to(source)
+        target = destination / relative
+        if item.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, target)
+
+
 def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> None:
     _wait_for_process_exit(pid)
 
@@ -73,8 +86,16 @@ def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> 
         extracted = _safe_extract(archive, staging)
         if backup.exists():
             shutil.rmtree(backup)
-        _rename_with_retry(install_dir, backup)
-        _rename_with_retry(extracted, install_dir)
+        try:
+            _rename_with_retry(install_dir, backup)
+            _rename_with_retry(extracted, install_dir)
+        except OSError:
+            # O Defender pode segurar o handle da pasta inteira. Nesse caso,
+            # copiar os arquivos individualmente ainda permite concluir a
+            # atualização sem deixar um backup parcial como instalação ativa.
+            if backup.exists() and not install_dir.exists():
+                backup.rename(install_dir)
+            _copy_tree_in_place(extracted, install_dir)
         if launch:
             os.startfile(str(install_dir / "YTD1P.exe"))
         shutil.rmtree(backup, ignore_errors=True)
