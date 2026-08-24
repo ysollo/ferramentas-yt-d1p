@@ -7,12 +7,14 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 from typing import Callable
 from urllib.request import Request, urlopen, urlretrieve
 
 
 GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/ysollo/ferramentas-yt-d1p/releases/latest"
 RELEASE_PAGE_URL = "https://github.com/ysollo/ferramentas-yt-d1p/releases/latest"
+UPDATE_DIR_NAME = "YTD1P-updates"
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,29 @@ class ReleaseInfo:
     asset_size: int | None = None
     asset_sha256: str | None = None
     checksum_url: str | None = None
+
+
+def cleanup_update_artifacts(update_dir: Path, preserve_error_log: bool = True) -> None:
+    """Remove payloads deixados por execuções anteriores do atualizador.
+
+    O log de erro é pequeno e pode ser útil para diagnóstico, então fica
+    preservado por padrão. ZIPs, manifests, auxiliares e diretórios de staging
+    são temporários e não devem sobreviver entre execuções do aplicativo.
+    Falhas de limpeza não impedem o downloader de abrir.
+    """
+
+    if not update_dir.is_dir():
+        return
+    for item in update_dir.iterdir():
+        if preserve_error_log and item.name == "updater-error.log" and item.is_file():
+            continue
+        try:
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def normalize_version(value: str) -> tuple[int, ...]:

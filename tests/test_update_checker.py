@@ -1,8 +1,11 @@
 import io
+from pathlib import Path
+import tempfile
 import unittest
 
 from src.update_checker import (
     checksum_from_manifest,
+    cleanup_update_artifacts,
     is_newer_version,
     normalize_version,
     parse_release,
@@ -25,6 +28,22 @@ class FakeResponse:
 
 
 class UpdateCheckerTests(unittest.TestCase):
+    def test_cleanup_update_artifacts_removes_payloads_but_keeps_error_log(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            update_dir = Path(directory)
+            (update_dir / "old.zip").write_bytes(b"zip")
+            (update_dir / "v0.3.1.sha256").write_text("checksum", encoding="utf-8")
+            (update_dir / "updater-error.log").write_text("details", encoding="utf-8")
+            (update_dir / "updater").mkdir()
+            (update_dir / "updater" / "helper.exe").write_bytes(b"helper")
+
+            cleanup_update_artifacts(update_dir)
+
+            self.assertFalse((update_dir / "old.zip").exists())
+            self.assertFalse((update_dir / "v0.3.1.sha256").exists())
+            self.assertFalse((update_dir / "updater").exists())
+            self.assertTrue((update_dir / "updater-error.log").exists())
+
     def test_versions_are_compared_without_v_prefix(self):
         self.assertEqual(normalize_version("v0.1.1"), (0, 1, 1))
         self.assertTrue(is_newer_version("0.1.1", "v0.1.2"))

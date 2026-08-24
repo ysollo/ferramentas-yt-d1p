@@ -43,7 +43,9 @@ from src.downloader_core import (  # noqa: E402
 )
 from src.update_checker import (  # noqa: E402
     RELEASE_PAGE_URL,
+    UPDATE_DIR_NAME,
     checksum_from_manifest,
+    cleanup_update_artifacts,
     download_file,
     fetch_latest_release,
     is_newer_version,
@@ -91,6 +93,7 @@ class DownloaderApp:
         self.status_label: tk.Label | None = None
 
         self._load_settings()
+        cleanup_update_artifacts(Path(tempfile.gettempdir()) / UPDATE_DIR_NAME)
         self._build()
         self.root.after(100, self._drain_events)
         self.root.after(1200, self._check_updates_in_background)
@@ -339,7 +342,8 @@ class DownloaderApp:
 
     def _download_update_worker(self, release):
         try:
-            update_dir = Path(tempfile.gettempdir()) / "YTD1P-updates"
+            update_dir = Path(tempfile.gettempdir()) / UPDATE_DIR_NAME
+            cleanup_update_artifacts(update_dir)
             update_dir.mkdir(parents=True, exist_ok=True)
             archive = update_dir / release.asset_name
             checksum_manifest = update_dir / f"{release.version}.sha256"

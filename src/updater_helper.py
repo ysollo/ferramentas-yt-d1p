@@ -16,6 +16,26 @@ import uuid
 import zipfile
 
 
+def _cleanup_downloaded_payload(archive: Path) -> None:
+    """Apaga ZIPs e manifests após uma instalação concluída.
+
+    O diretório do auxiliar é mantido até a próxima abertura do app, porque
+    o próprio executável ainda pode estar sendo usado pelo Windows. A pasta
+    inteira é removida com segurança pelo app na inicialização seguinte.
+    """
+
+    update_dir = archive.parent
+    try:
+        archive.unlink(missing_ok=True)
+    except OSError:
+        pass
+    for item in update_dir.glob("*.sha256"):
+        try:
+            item.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def _safe_extract(archive: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
@@ -99,6 +119,7 @@ def install(archive: Path, install_dir: Path, pid: int, launch: bool = True) -> 
         if launch:
             os.startfile(str(install_dir / "YTD1P.exe"))
         shutil.rmtree(backup, ignore_errors=True)
+        _cleanup_downloaded_payload(archive)
     except Exception:
         if not install_dir.exists() and backup.exists():
             backup.rename(install_dir)
