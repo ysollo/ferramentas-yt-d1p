@@ -291,7 +291,7 @@ class DownloaderApp:
         for entry in self.playlist_entries:
             index = self.playlist_list.size()
             self.playlist_list.insert("end", f"[X]  {entry.title}  [{self._playlist_duration(entry.duration)}]")
-            self.playlist_list.itemconfig(index, foreground="#1769aa")
+            self.playlist_list.itemconfig(index, foreground="#000000")
         self._set_playlist_status(f"{info.title}: {len(info.entries)} vídeo(s) carregado(s).", "success")
 
     def _refresh_playlist_items(self):
@@ -301,7 +301,7 @@ class DownloaderApp:
             self.playlist_list.insert(index, f"{mark}  {entry.title}  [{self._playlist_duration(entry.duration)}]")
             self.playlist_list.itemconfig(
                 index,
-                foreground="#1769aa" if index in self.playlist_selected else "#777777",
+                foreground="#000000",
             )
 
     def _toggle_playlist_item(self, _event=None):
