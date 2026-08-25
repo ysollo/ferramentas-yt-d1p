@@ -1,11 +1,17 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.downloader_core import (
+    DownloadFailure,
     DownloadOptions,
     MAX_URL_LENGTH,
+    PlaylistEntry,
+    PlaylistInfo,
     audio_format_selector,
     build_options,
+    download_playlist,
+    inspect_playlist,
     video_format_selector,
     summarize_error,
 )
@@ -126,6 +132,48 @@ class SelectorTests(unittest.TestCase):
                     output_dir=Path(__file__).parent / "_test-output",
                 )
             )
+
+    def test_inspect_playlist_returns_flat_video_entries(self):
+        fake_data = {"_type": "playlist", "id": "PL123", "title": "Minha lista", "entries": [{"id": "abc", "title": "Primeiro", "duration": 65}, {"id": "def", "title": "Segundo"}]}
+        fake_ydl = unittest.mock.MagicMock()
+        fake_ydl.__enter__.return_value.extract_info.return_value = fake_data
+        with patch("src.downloader_core.yt_dlp.YoutubeDL", return_value=fake_ydl):
+            info = inspect_playlist("https://www.youtube.com/playlist?list=PL123")
+        self.assertEqual(info.id, "PL123")
+        self.assertEqual([entry.id for entry in info.entries], ["abc", "def"])
+        self.assertEqual(info.entries[0].url, "https://www.youtube.com/watch?v=abc")
+
+    def test_playlist_checkpoint_skips_completed_items_on_second_run(self):
+        output = Path(__file__).parent / "_playlist-test-output"
+        output.mkdir(exist_ok=True)
+        try:
+            playlist = PlaylistInfo("PL123", "Minha lista", (PlaylistEntry("abc", "Primeiro", "https://youtu.be/abc"), PlaylistEntry("def", "Segundo", "https://youtu.be/def")))
+            options = DownloadOptions(url="", output_dir=output)
+            with patch("src.downloader_core.download") as mocked_download:
+                first = download_playlist(playlist, list(playlist.entries), options)
+                second = download_playlist(playlist, list(playlist.entries), options)
+            self.assertEqual(first.completed, 2)
+            self.assertEqual(second.completed, 0)
+            self.assertEqual(second.skipped_checkpoint, 2)
+            self.assertEqual(mocked_download.call_count, 2)
+        finally:
+            (output / ".ytd1p-playlist-checkpoint.json").unlink(missing_ok=True)
+            output.rmdir()
+
+    def test_playlist_continues_after_one_item_fails(self):
+        output = Path(__file__).parent / "_playlist-test-output"
+        output.mkdir(exist_ok=True)
+        try:
+            playlist = PlaylistInfo("PL123", "Minha lista", (PlaylistEntry("abc", "Falha", "https://youtu.be/abc"), PlaylistEntry("def", "Sucesso", "https://youtu.be/def")))
+            options = DownloadOptions(url="", output_dir=output)
+            with patch("src.downloader_core.download", side_effect=[DownloadFailure("falhou", "erro"), None]) as mocked_download:
+                result = download_playlist(playlist, list(playlist.entries), options)
+            self.assertEqual(result.failed, 1)
+            self.assertEqual(result.completed, 1)
+            self.assertEqual(mocked_download.call_count, 2)
+        finally:
+            (output / ".ytd1p-playlist-checkpoint.json").unlink(missing_ok=True)
+            output.rmdir()
 
 
 class TemporaryOutput:

@@ -7,6 +7,9 @@ configuração do yt-dlp, emite progresso e permite cancelamento cooperativo.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
+import hashlib
+import json
 from pathlib import Path
 import re
 from threading import Event
@@ -19,6 +22,7 @@ VideoLimit = Literal["auto", "144", "240", "360", "480", "720", "1080", "1440", 
 AudioFormat = Literal["mp3", "m4a", "opus", "flac", "wav", "aac", "alac", "vorbis"]
 PotProvider = Literal["none", "wpc"]
 MAX_URL_LENGTH = 2048
+PLAYLIST_CHECKPOINT_FILENAME = ".ytd1p-playlist-checkpoint.json"
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,169 @@ class DownloadFailure(Exception):
         super().__init__(user_message)
         self.user_message = user_message
         self.technical_detail = technical_detail
+
+
+@dataclass(frozen=True)
+class PlaylistEntry:
+    """Item exibido na fila de uma playlist."""
+
+    id: str
+    title: str
+    url: str
+    duration: int | None = None
+
+
+@dataclass(frozen=True)
+class PlaylistInfo:
+    """Metadados leves da playlist, sem baixar os vídeos."""
+
+    id: str
+    title: str
+    entries: tuple[PlaylistEntry, ...]
+
+
+@dataclass(frozen=True)
+class PlaylistResult:
+    attempted: int
+    completed: int
+    skipped_checkpoint: int
+    failed: int
+
+
+def _format_playlist_duration(seconds: object) -> int | None:
+    try:
+        value = int(seconds) if seconds is not None else None
+    except (TypeError, ValueError):
+        return None
+    return value if value is not None and value >= 0 else None
+
+
+def inspect_playlist(url: str, log_callback: LogCallback | None = None) -> PlaylistInfo:
+    """Lê títulos/IDs de uma playlist sem resolver ou baixar os streams."""
+
+    if not url.strip():
+        raise ValueError("O link da playlist não pode ficar vazio.")
+    if len(url.strip()) > MAX_URL_LENGTH:
+        raise ValueError(
+            f"O link ultrapassa o limite de {MAX_URL_LENGTH} caracteres. "
+            "Cole somente a URL da playlist."
+        )
+    config = {
+        "quiet": True,
+        "no_warnings": False,
+        "extract_flat": "in_playlist",
+        "skip_download": True,
+        "ignoreerrors": False,
+        "noplaylist": False,
+    }
+    if log_callback:
+        config["logger"] = _YtdlpLogger(log_callback)
+    try:
+        with yt_dlp.YoutubeDL(config) as ydl:
+            data = ydl.extract_info(url.strip(), download=False)
+    except yt_dlp.utils.DownloadError as error:
+        user_message, technical_detail = summarize_error(error, url.strip())
+        raise DownloadFailure(user_message, technical_detail) from error
+    if not data or data.get("_type") != "playlist":
+        raise DownloadFailure(
+            "Este link não parece ser uma playlist do YouTube.",
+            "A extração não retornou uma coleção de vídeos.",
+        )
+    entries: list[PlaylistEntry] = []
+    for raw in data.get("entries") or []:
+        if not raw:
+            continue
+        video_id = str(raw.get("id") or "").strip()
+        if not video_id:
+            continue
+        entries.append(
+            PlaylistEntry(
+                id=video_id,
+                title=str(raw.get("title") or video_id),
+                url=str(raw.get("webpage_url") or raw.get("original_url") or f"https://www.youtube.com/watch?v={video_id}"),
+                duration=_format_playlist_duration(raw.get("duration")),
+            )
+        )
+    return PlaylistInfo(
+        id=str(data.get("id") or "playlist"),
+        title=str(data.get("title") or "Playlist"),
+        entries=tuple(entries),
+    )
+
+
+def playlist_checkpoint_path(output_dir: Path) -> Path:
+    return output_dir.expanduser().resolve() / PLAYLIST_CHECKPOINT_FILENAME
+
+
+def _playlist_checkpoint_key(playlist: PlaylistInfo, options: DownloadOptions) -> str:
+    identity = {
+        "playlist": playlist.id,
+        "output_dir": str(options.output_dir.expanduser().resolve()),
+        "mode": options.mode,
+        "video_limit": options.video_limit,
+        "audio_format": options.audio_format,
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def load_playlist_checkpoint(playlist: PlaylistInfo, options: DownloadOptions) -> set[str]:
+    try:
+        data = json.loads(playlist_checkpoint_path(options.output_dir).read_text(encoding="utf-8"))
+        return {str(value) for value in data.get(_playlist_checkpoint_key(playlist, options), []) if value}
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def _save_playlist_checkpoint(playlist: PlaylistInfo, options: DownloadOptions, completed: set[str]) -> None:
+    path = playlist_checkpoint_path(options.output_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            data = {}
+        data[_playlist_checkpoint_key(playlist, options)] = sorted(completed)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def download_playlist(
+    playlist: PlaylistInfo,
+    entries: list[PlaylistEntry] | tuple[PlaylistEntry, ...],
+    options: DownloadOptions,
+    callback: ProgressCallback | None = None,
+    cancel: Event | None = None,
+    log_callback: LogCallback | None = None,
+) -> PlaylistResult:
+    """Baixa itens selecionados, salvando o checkpoint após cada sucesso."""
+
+    completed = load_playlist_checkpoint(playlist, options)
+    attempted = completed_now = skipped = failed = 0
+    for entry in entries:
+        if cancel and cancel.is_set():
+            raise DownloadCancelled("Download da playlist cancelado pelo usuário.")
+        if entry.id in completed:
+            skipped += 1
+            if log_callback:
+                log_callback(f"Ignorado pelo checkpoint: {entry.title}")
+            continue
+        attempted += 1
+        try:
+            download(replace(options, url=entry.url), callback=callback, cancel=cancel, log_callback=log_callback)
+        except DownloadCancelled:
+            raise
+        except Exception as error:
+            failed += 1
+            if log_callback:
+                log_callback(f"Falha em {entry.title}: {error}")
+            continue
+        completed.add(entry.id)
+        completed_now += 1
+        _save_playlist_checkpoint(playlist, options, completed)
+        if log_callback:
+            log_callback(f"Concluído: {entry.title}")
+    return PlaylistResult(attempted, completed_now, skipped, failed)
 
 
 def summarize_error(

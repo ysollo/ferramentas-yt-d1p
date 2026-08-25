@@ -35,11 +35,17 @@ def _configure_bundled_runtime():
 _configure_bundled_runtime()
 
 from src.downloader_core import (  # noqa: E402
+    DownloadCancelled,
     DownloadFailure,
     DownloadOptions,
     MAX_URL_LENGTH,
+    PlaylistEntry,
+    PlaylistInfo,
+    PlaylistResult,
     Progress,
     download,
+    download_playlist,
+    inspect_playlist,
 )
 from src.update_checker import (  # noqa: E402
     RELEASE_PAGE_URL,
@@ -73,6 +79,7 @@ class DownloaderApp:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
+        self.playlist_worker: threading.Thread | None = None
         self.skipped_existing = False
         self.postprocessing_seen = False
 
@@ -89,6 +96,12 @@ class DownloaderApp:
         self.browser = tk.StringVar(value="chrome")
         self.wpc_enabled = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Pronto para baixar")
+        self.playlist_url = tk.StringVar()
+        self.playlist_status = tk.StringVar(value="Cole uma playlist para começar.")
+        self.playlist_info: PlaylistInfo | None = None
+        self.playlist_entries: list[PlaylistEntry] = []
+        self.playlist_selected: set[int] = set()
+        self.playlist_status_label: tk.Label | None = None
         self.progress = tk.DoubleVar(value=0)
         self.status_label: tk.Label | None = None
 
@@ -218,6 +231,140 @@ class DownloaderApp:
         details.pack(fill="both", expand=True, pady=(12, 0))
         self.log = tk.Text(details, height=8, state="disabled", wrap="word")
         self.log.pack(fill="both", expand=True)
+        self._build_playlist_tab(notebook)
+
+    def _build_playlist_tab(self, notebook: ttk.Notebook):
+        tab = ttk.Frame(notebook, padding=16)
+        notebook.add(tab, text="Playlist")
+        ttk.Label(tab, text="Link da playlist", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=(4, 10))
+        ttk.Entry(row, textvariable=self.playlist_url, font=("Segoe UI", 11)).pack(side="left", fill="x", expand=True)
+        self.playlist_load_button = ttk.Button(row, text="Carregar playlist", command=self._load_playlist)
+        self.playlist_load_button.pack(side="left", padx=(8, 0))
+        opts = ttk.LabelFrame(tab, text="Configurações", padding=10)
+        opts.pack(fill="x", pady=(0, 10))
+        ttk.Label(opts, text="Qualidade:").pack(side="left")
+        self.playlist_quality = tk.StringVar(value="auto")
+        ttk.Combobox(opts, textvariable=self.playlist_quality, values=("auto", "2160", "1440", "1080", "720", "480", "360"), state="readonly", width=10).pack(side="left", padx=8)
+        self.playlist_audio_only = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="Somente áudio (MP3)", variable=self.playlist_audio_only).pack(side="left", padx=(16, 0))
+        self.playlist_list = tk.Listbox(tab, selectmode="browse", font=("Segoe UI", 10))
+        self.playlist_list.pack(fill="both", expand=True)
+        self.playlist_list.bind("<Double-Button-1>", self._toggle_playlist_item)
+        controls = ttk.Frame(tab)
+        controls.pack(fill="x", pady=(8, 0))
+        ttk.Button(controls, text="Marcar todos", command=self._select_all_playlist).pack(side="right")
+        ttk.Button(controls, text="Desmarcar todos", command=self._deselect_all_playlist).pack(side="right", padx=(0, 8))
+        self.playlist_start_button = tk.Button(tab, text="INICIAR DOWNLOAD DA PLAYLIST", command=self._start_playlist, font=("Segoe UI", 12, "bold"), height=2, bg="#1769aa", fg="white", activebackground="#0d4f80")
+        self.playlist_start_button.pack(fill="x", pady=(10, 6))
+        self.playlist_cancel_button = ttk.Button(tab, text="Cancelar", command=self._cancel_playlist, state="disabled")
+        self.playlist_cancel_button.pack(anchor="e")
+        self.playlist_status_label = tk.Label(tab, textvariable=self.playlist_status, anchor="w", justify="left", fg="#555555")
+        self.playlist_status_label.pack(fill="x", pady=(10, 0))
+
+    def _set_playlist_status(self, text: str, tone: str = "neutral"):
+        colors = {"neutral": "#555555", "working": "#555555", "success": "#167c2e", "warning": "#9a6700", "error": "#b00020"}
+        self.playlist_status.set(text)
+        if self.playlist_status_label is not None:
+            self.playlist_status_label.configure(fg=colors.get(tone, colors["neutral"]))
+
+    @staticmethod
+    def _playlist_duration(seconds: int | None) -> str:
+        if seconds is None:
+            return "—"
+        minutes, remainder = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours}:{minutes:02d}:{remainder:02d}" if hours else f"{minutes}:{remainder:02d}"
+
+    def _render_playlist(self, info: PlaylistInfo):
+        self.playlist_info = info
+        self.playlist_entries = list(info.entries)
+        self.playlist_selected = set(range(len(self.playlist_entries)))
+        self.playlist_list.delete(0, "end")
+        for entry in self.playlist_entries:
+            self.playlist_list.insert("end", f"☑  {entry.title}  [{self._playlist_duration(entry.duration)}]")
+        self._set_playlist_status(f"{info.title}: {len(info.entries)} vídeo(s) carregado(s).", "success")
+
+    def _refresh_playlist_items(self):
+        for index, entry in enumerate(self.playlist_entries):
+            mark = "☑" if index in self.playlist_selected else "☐"
+            self.playlist_list.delete(index)
+            self.playlist_list.insert(index, f"{mark}  {entry.title}  [{self._playlist_duration(entry.duration)}]")
+
+    def _toggle_playlist_item(self, _event=None):
+        selection = self.playlist_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        if index in self.playlist_selected:
+            self.playlist_selected.remove(index)
+        else:
+            self.playlist_selected.add(index)
+        self._refresh_playlist_items()
+        self.playlist_list.selection_set(index)
+
+    def _select_all_playlist(self):
+        self.playlist_selected = set(range(len(self.playlist_entries)))
+        self._refresh_playlist_items()
+
+    def _deselect_all_playlist(self):
+        self.playlist_selected.clear()
+        self._refresh_playlist_items()
+
+    def _load_playlist(self):
+        url = self.playlist_url.get().strip()
+        if not url:
+            self._set_playlist_status("Cole o link de uma playlist antes de carregar.", "error")
+            return
+        if len(url) > MAX_URL_LENGTH:
+            self._set_playlist_status(f"O link ultrapassa o limite de {MAX_URL_LENGTH} caracteres.", "error")
+            return
+        self.playlist_load_button.configure(state="disabled")
+        self.playlist_start_button.configure(state="disabled")
+        self._set_playlist_status("Lendo a lista de vídeos…", "working")
+        self.playlist_worker = threading.Thread(target=self._run_playlist_load, args=(url,), daemon=True)
+        self.playlist_worker.start()
+
+    def _run_playlist_load(self, url: str):
+        try:
+            info = inspect_playlist(url, log_callback=lambda value: self.events.put(("playlist_log", value)))
+            self.events.put(("playlist_loaded", info))
+        except Exception as error:
+            self.events.put(("playlist_error", error))
+
+    def _start_playlist(self):
+        if not self.playlist_info:
+            self._set_playlist_status("Carregue uma playlist antes de iniciar.", "error")
+            return
+        entries = [self.playlist_entries[index] for index in sorted(self.playlist_selected)]
+        if not entries:
+            self._set_playlist_status("Marque pelo menos um vídeo para baixar.", "error")
+            return
+        self.cancel_event.clear()
+        self.playlist_start_button.configure(state="disabled")
+        self.playlist_load_button.configure(state="disabled")
+        self.playlist_cancel_button.configure(state="normal")
+        self._set_playlist_status(f"Baixando {len(entries)} item(ns)…", "working")
+        options = self._make_options(url="", playlist=True)
+        self.playlist_worker = threading.Thread(target=self._run_playlist_download, args=(self.playlist_info, entries, options), daemon=True)
+        self.playlist_worker.start()
+
+    def _run_playlist_download(self, info: PlaylistInfo, entries: list[PlaylistEntry], options: DownloadOptions):
+        try:
+            result = download_playlist(info, entries, options, callback=lambda value: self.events.put(("playlist_progress", value)), cancel=self.cancel_event, log_callback=lambda value: self.events.put(("playlist_log", value)))
+            self.events.put(("playlist_done", result))
+        except Exception as error:
+            self.events.put(("playlist_error", error))
+
+    def _cancel_playlist(self):
+        self.cancel_event.set()
+        self._set_playlist_status("Cancelando…", "warning")
+
+    def _finish_playlist(self):
+        self.playlist_load_button.configure(state="normal")
+        self.playlist_start_button.configure(state="normal")
+        self.playlist_cancel_button.configure(state="disabled")
 
     def _toggle_audio(self):
         if self.audio_only.get():
@@ -438,14 +585,14 @@ class DownloaderApp:
         self.cancel_button.configure(state="normal")
         self._launch_worker(self._make_options())
 
-    def _make_options(self, use_compatibility: bool | None = None) -> DownloadOptions:
+    def _make_options(self, use_compatibility: bool | None = None, url: str | None = None, playlist: bool = False) -> DownloadOptions:
         if use_compatibility is None:
             use_compatibility = self.wpc_enabled.get()
         return DownloadOptions(
-            url=self.url.get().strip(),
+            url=(url if url is not None else self.url.get()).strip(),
             output_dir=Path(self.output_dir.get()),
-            mode="audio" if self.audio_only.get() else "video",
-            video_limit=self.quality.get(),
+            mode="audio" if (self.playlist_audio_only.get() if playlist else self.audio_only.get()) else "video",
+            video_limit=self.playlist_quality.get() if playlist else self.quality.get(),
             audio_format=self.audio_format.get(),
             use_browser_session=self.browser_session.get(),
             browser=self.browser.get() if self.browser_session.get() else None,
@@ -532,6 +679,37 @@ class DownloaderApp:
                     self._handle_update_error(value)
                 elif event == "log":
                     self._handle_log(str(value))
+                elif event == "playlist_log":
+                    self._append_log(f"[Playlist] {value}")
+                elif event == "playlist_loaded":
+                    self._render_playlist(value)
+                    self.playlist_load_button.configure(state="normal")
+                    self.playlist_start_button.configure(state="normal")
+                elif event == "playlist_done":
+                    result: PlaylistResult = value
+                    self._finish_playlist()
+                    tone = "warning" if result.failed else "success"
+                    self._set_playlist_status(
+                        f"Playlist concluída: {result.completed} novo(s), "
+                        f"{result.skipped_checkpoint} já baixado(s), {result.failed} falha(s).",
+                        tone,
+                    )
+                    self._append_log(
+                        f"Playlist concluída — novos: {result.completed}; "
+                        f"checkpoint: {result.skipped_checkpoint}; falhas: {result.failed}."
+                    )
+                elif event == "playlist_error":
+                    self._finish_playlist()
+                    error = value
+                    if isinstance(error, DownloadFailure):
+                        self._set_playlist_status(error.user_message, "error")
+                        self._append_log(error.technical_detail)
+                    elif isinstance(error, DownloadCancelled):
+                        self._set_playlist_status("Download da playlist cancelado.", "warning")
+                        self._append_log(str(error))
+                    else:
+                        self._set_playlist_status("Não foi possível carregar/concluir a playlist.", "error")
+                        self._append_log(str(error))
         except queue.Empty:
             pass
         self.root.after(100, self._drain_events)

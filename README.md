@@ -29,7 +29,9 @@ comandos no terminal, mas mantém um painel técnico completo para diagnóstico.
 - suporte opcional à sessão local do Chrome, Firefox ou Edge (Chrome é o padrão);
 - proteção contra colagem acidental de logs enormes no campo de URL.
 
-A aba de playlists está planejada, mas ainda não faz parte desta versão.
+A aba de playlists está em implementação inicial no código-fonte: carrega a lista, permite
+marcar/desmarcar itens e usa checkpoint por playlist/configuração. A validação com uma playlist
+real e a publicação dessa funcionalidade ficam para a próxima release.
 
 No modo automático, o yt-dlp escolhe a melhor combinação de vídeo e áudio que o link realmente
 oferece. Ao escolher uma resolução, o aplicativo tenta essa resolução ou uma menor disponível;
