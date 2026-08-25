@@ -2,7 +2,7 @@
 
 Downloader simples para vídeos e áudios do YouTube no Windows, com interface gráfica.
 
-Versão atual: **0.3.2**.
+Versão atual: **0.4.0**.
 
 ## O que mudou nesta versão
 
@@ -13,6 +13,7 @@ Versão atual: **0.3.2**.
 - verificação de atualizações pela release pública, com fallback seguro quando estiver offline.
 - download validado por SHA-256 e atualização assistida com auxiliar separado e rollback.
 - limpeza automática dos ZIPs, manifests e auxiliares temporários do atualizador.
+- módulo de playlists com seleção individual, checkpoint e progresso da fila.
 
 O projeto usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) como motor e FFmpeg para juntar streams
 e converter áudio. A interface foi pensada para uso direto por pessoas que não querem montar
