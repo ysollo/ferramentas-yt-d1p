@@ -102,6 +102,10 @@ class DownloaderApp:
         self.playlist_entries: list[PlaylistEntry] = []
         self.playlist_selected: set[int] = set()
         self.playlist_status_label: tk.Label | None = None
+        self.playlist_progress = tk.DoubleVar(value=0)
+        self.playlist_current = tk.StringVar(value="Nenhum download em andamento")
+        self.playlist_total = 0
+        self.playlist_finished = 0
         self.progress = tk.DoubleVar(value=0)
         self.status_label: tk.Label | None = None
 
@@ -260,6 +264,8 @@ class DownloaderApp:
         self.playlist_start_button.pack(fill="x", pady=(10, 6))
         self.playlist_cancel_button = ttk.Button(tab, text="Cancelar", command=self._cancel_playlist, state="disabled")
         self.playlist_cancel_button.pack(anchor="e")
+        ttk.Label(tab, textvariable=self.playlist_current, anchor="w").pack(fill="x", pady=(8, 0))
+        ttk.Progressbar(tab, variable=self.playlist_progress, maximum=100).pack(fill="x", pady=(4, 0))
         self.playlist_status_label = tk.Label(tab, textvariable=self.playlist_status, anchor="w", justify="left", fg="#555555")
         self.playlist_status_label.pack(fill="x", pady=(10, 0))
 
@@ -283,14 +289,20 @@ class DownloaderApp:
         self.playlist_selected = set(range(len(self.playlist_entries)))
         self.playlist_list.delete(0, "end")
         for entry in self.playlist_entries:
-            self.playlist_list.insert("end", f"☑  {entry.title}  [{self._playlist_duration(entry.duration)}]")
+            index = self.playlist_list.size()
+            self.playlist_list.insert("end", f"[X]  {entry.title}  [{self._playlist_duration(entry.duration)}]")
+            self.playlist_list.itemconfig(index, foreground="#1769aa")
         self._set_playlist_status(f"{info.title}: {len(info.entries)} vídeo(s) carregado(s).", "success")
 
     def _refresh_playlist_items(self):
         for index, entry in enumerate(self.playlist_entries):
-            mark = "☑" if index in self.playlist_selected else "☐"
+            mark = "[X]" if index in self.playlist_selected else "[ ]"
             self.playlist_list.delete(index)
             self.playlist_list.insert(index, f"{mark}  {entry.title}  [{self._playlist_duration(entry.duration)}]")
+            self.playlist_list.itemconfig(
+                index,
+                foreground="#1769aa" if index in self.playlist_selected else "#777777",
+            )
 
     def _toggle_playlist_item(self, _event=None):
         selection = self.playlist_list.curselection()
@@ -345,6 +357,10 @@ class DownloaderApp:
         self.playlist_start_button.configure(state="disabled")
         self.playlist_load_button.configure(state="disabled")
         self.playlist_cancel_button.configure(state="normal")
+        self.playlist_total = len(entries)
+        self.playlist_finished = 0
+        self.playlist_progress.set(0)
+        self.playlist_current.set(f"Preparando 0/{self.playlist_total}…")
         self._set_playlist_status(f"Baixando {len(entries)} item(ns)…", "working")
         options = self._make_options(url="", playlist=True)
         self.playlist_worker = threading.Thread(target=self._run_playlist_download, args=(self.playlist_info, entries, options), daemon=True)
@@ -680,7 +696,17 @@ class DownloaderApp:
                 elif event == "log":
                     self._handle_log(str(value))
                 elif event == "playlist_log":
-                    self._append_log(f"[Playlist] {value}")
+                    text = str(value)
+                    self._append_log(f"[Playlist] {text}")
+                    if text.startswith("Iniciando item: "):
+                        self.playlist_current.set(
+                            f"Baixando {self.playlist_finished + 1}/{self.playlist_total}: "
+                            f"{text.removeprefix('Iniciando item: ')}"
+                        )
+                    elif text.startswith("Concluído:") or text.startswith("Ignorado pelo checkpoint:"):
+                        self.playlist_finished = min(self.playlist_total, self.playlist_finished + 1)
+                        if self.playlist_total:
+                            self.playlist_progress.set(self.playlist_finished / self.playlist_total * 100)
                 elif event == "playlist_loaded":
                     self._render_playlist(value)
                     self.playlist_load_button.configure(state="normal")
@@ -688,6 +714,11 @@ class DownloaderApp:
                 elif event == "playlist_done":
                     result: PlaylistResult = value
                     self._finish_playlist()
+                    self.playlist_progress.set(100 if not result.failed else self.playlist_progress.get())
+                    self.playlist_current.set(
+                        f"Finalizado: {result.completed} novo(s), "
+                        f"{result.skipped_checkpoint} já baixado(s)."
+                    )
                     tone = "warning" if result.failed else "success"
                     self._set_playlist_status(
                         f"Playlist concluída: {result.completed} novo(s), "
@@ -707,6 +738,17 @@ class DownloaderApp:
                     elif isinstance(error, DownloadCancelled):
                         self._set_playlist_status("Download da playlist cancelado.", "warning")
                         self._append_log(str(error))
+                elif event == "playlist_progress":
+                    progress: Progress = value
+                    if progress.percent is not None and self.playlist_total:
+                        item_percent = progress.percent
+                        self.playlist_progress.set(
+                            min(100, ((self.playlist_finished + item_percent / 100) / self.playlist_total) * 100)
+                        )
+                        self.playlist_current.set(
+                            f"Baixando {self.playlist_finished + 1}/{self.playlist_total} — "
+                            f"{item_percent:.0f}%"
+                        )
                     else:
                         self._set_playlist_status("Não foi possível carregar/concluir a playlist.", "error")
                         self._append_log(str(error))

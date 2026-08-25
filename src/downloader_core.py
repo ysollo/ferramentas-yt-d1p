@@ -292,6 +292,8 @@ def download_playlist(
                 log_callback(f"Ignorado pelo checkpoint: {entry.title}")
             continue
         attempted += 1
+        if log_callback:
+            log_callback(f"Iniciando item: {entry.title}")
         try:
             download(replace(options, url=entry.url), callback=callback, cancel=cancel, log_callback=log_callback)
         except DownloadCancelled:
